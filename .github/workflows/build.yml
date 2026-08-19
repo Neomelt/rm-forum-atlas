@@ -23,9 +23,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Generate site
         run: |
-          mkdir -p dist
-          python3 generate.py . dist/index.html
-          test "$(stat -c%s dist/index.html)" -gt 2000000
+          python3 generate.py . dist
+          test "$(stat -c%s dist/index.html)" -gt 80000
+          test "$(stat -c%s dist/all.html)" -gt 2000000
       - uses: actions/configure-pages@v5
         with:
           enablement: true

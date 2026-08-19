@@ -2,7 +2,7 @@
 
 [bbs.robomaster.com](https://bbs.robomaster.com) 创站以来全部公开帖子的统计画像与技术索引，每日自动更新。
 
-**在线访问：https://neomelt.github.io/rm-forum-atlas/**
+**在线访问：[图鉴](https://neomelt.github.io/rm-forum-atlas/) · [全量索引](https://neomelt.github.io/rm-forum-atlas/all.html)**
 
 ## 内容
 
@@ -20,5 +20,5 @@
 ## 本地构建
 
 ```bash
-python3 generate.py . dist/index.html   # 需联网(约 50 个列表请求)
+python3 generate.py . dist   # 产出 dist/index.html(图鉴) 与 dist/all.html(全量索引);需联网(约50个列表请求)
 ```

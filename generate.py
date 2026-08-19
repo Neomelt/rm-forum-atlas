@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """RM 论坛技术图鉴·合体页生成器。
-用法: python3 generate.py <payload_dir> <out_html>
+用法: python3 generate.py <repo_root> <out_dir>  (产出 index.html 与 all.html)
 payload: data/legacy_corpus.json + blocks/*.html (相对仓库根)
 联网: 拉取 bbs.robomaster.com 三类公开列表(约50请求)。失败则非零退出、不产出。
 """
@@ -193,8 +193,8 @@ index_html='\n'.join(secs)
 
 total=len(corpus); tviews=sum(v(a) for a in corpus); nleg=sum(1 for a in corpus if a.get('history'))
 
-head=open(ROOT+'/blocks/block_head.html').read()
-head=head.replace('</style>','''
+head_raw=open(ROOT+'/blocks/block_head.html').read()
+EXTRA_CSS="""
 .filter{position:sticky;top:0;background:var(--bg);padding:12px 0;z-index:5;border-bottom:1px solid var(--line);margin-bottom:14px}
 .filter input{width:100%;padding:10px 14px;font-size:15px;border:1.5px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font-family:inherit}
 .filter input:focus{outline:2px solid var(--accent);border-color:var(--accent)}
@@ -207,24 +207,40 @@ td.ti a:hover{color:var(--accent);text-decoration:underline}
 .cc{display:inline-block;font-size:10.5px;color:var(--accent);background:var(--code-bg);border-radius:4px;padding:0 5px;margin-left:6px;vertical-align:1px}
 tr.hid{display:none}
 .stamp{display:inline-block;background:var(--accent-soft);color:var(--accent);border-radius:99px;padding:2px 12px;font-size:12.5px;font-weight:700}
-</style>''')
+.pnav{display:flex;gap:8px;margin:0 0 22px}
+.pnav a{padding:7px 18px;border:1px solid var(--line);border-radius:99px;text-decoration:none;color:var(--muted);font-weight:700;font-size:13.5px;background:var(--surface)}
+.pnav a.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+</style>"""
 essence=open(ROOT+'/blocks/block_essence.html').read()
 catalog=open(ROOT+'/blocks/block_catalog.html').read()
 
-page=f'''<!doctype html>
+def shell(title,body,script=''):
+    head=head_raw.replace('<title>RM 论坛技术图鉴</title>',f'<title>{title}</title>').replace('</style>',EXTRA_CSS)
+    return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="RoboMaster 论坛全史统计画像、93 项开源技术点、65 篇远古精华与全量索引,每日自动更新">
+<meta name="description" content="RoboMaster 论坛全史统计画像、开源技术点索引与远古精华,每日自动更新">
 {head}
 </head>
 <body>
 <div class="wrap">
-<header class="hero">
+{body}
+</div>
+{script}
+</body>
+</html>"""
+
+def navi(cur):
+    a=' class="on"' if cur=='atlas' else ''
+    b=' class="on"' if cur=='all' else ''
+    return f'<nav class="pnav"><a href="./"{a}>图鉴</a><a href="./all.html"{b}>全量索引</a></nav>'
+
+atlas_body=f"""{navi('atlas')}<header class="hero">
 <div class="eyebrow">bbs.robomaster.com · 每日自动更新</div>
 <h1>RM 论坛技术图鉴</h1>
-<div class="meta">论坛创站以来 <b>{total:,} 帖</b>的全史统计画像、<b>93 项</b>开源技术点、<b>65 篇</b>远古精华与全量索引。<span class="stamp">数据截至 {STAMP}</span></div>
+<div class="meta">论坛创站以来 <b>{total:,} 帖</b>的全史统计画像、<b>93 项</b>开源技术点与 <b>65 篇</b>远古精华。<span class="stamp">数据截至 {STAMP}</span></div>
 </header>
 <div class="tiles">
 <div class="tile"><b>{total:,}</b><span>全量帖子（2015-02 起）</span></div>
@@ -263,14 +279,19 @@ page=f'''<!doctype html>
 {essence}
 {catalog}
 
-<h2>全量索引</h2>
-<p class="sub">全部 {total:,} 帖：按年分组、组内按浏览量降序。口径：老论坛迁移档案全量（id 1–30000 枚举快照）+ 新论坛公开列表（文章/专栏/问答，每日刷新）；战队私有 wiki 模板节点已排除；新论坛未过审帖不可枚举。</p>
+<footer>数据截至 {STAMP}（每日自动刷新）· 全量检索见「全量索引」页 · 图鉴 93 项与远古精华 65 篇为 2026-08 编辑内容</footer>"""
+
+all_body=f"""{navi('all')}<header class="hero">
+<div class="eyebrow">bbs.robomaster.com · 每日自动更新</div>
+<h1>RM 论坛全量索引</h1>
+<div class="meta">全部 <b>{total:,} 帖</b>：按年分组、组内按浏览量降序、标题实时过滤。<span class="stamp">数据截至 {STAMP}</span></div>
+</header>
+<p class="sub">口径：老论坛迁移档案全量（id 1–30000 枚举快照，浏览量为 2026-08 快照）+ 新论坛公开列表（文章/专栏/问答，每日刷新）；战队私有 wiki 模板节点已排除；新论坛未过审帖不可枚举。</p>
 <div class="filter"><input id="q" type="search" placeholder="过滤标题…（如：陀螺 / 超级电容 / 雷达 / 轮腿 / 开源）"><div class="fcount" id="fc">共 {total:,} 帖</div></div>
 {index_html}
+<footer>数据截至 {STAMP}（每日自动刷新）</footer>"""
 
-<footer>数据截至 {STAMP}（每日自动刷新）· 统计口径：全史图表=全量语料；兵种/热度/赞率=新论坛列表；远古区浏览量为快照 · 图鉴 93 项与远古精华 65 篇为 2026-08 编辑内容</footer>
-</div>
-<script>
+all_script=f"""<script>
 const q=document.getElementById('q'),fc=document.getElementById('fc');
 const rows=[...document.querySelectorAll('tr[data-t]')];
 const dets=[...document.querySelectorAll('details[data-year]')];
@@ -287,6 +308,11 @@ function run(){{
   }});
   fc.textContent='命中 '+n.toLocaleString()+' 帖';
 }}
-</script>\n</body>\n</html>'''
-open(OUT,'w').write(page)
-print(f"OK 生成 {OUT}: {len(page):,} 字节 | 语料 {total:,} (新论坛 {len(listed):,})")
+</script>"""
+
+import os
+os.makedirs(OUT,exist_ok=True)
+p1=os.path.join(OUT,'index.html'); p2=os.path.join(OUT,'all.html')
+open(p1,'w').write(shell('RM 论坛技术图鉴',atlas_body))
+open(p2,'w').write(shell('RM 论坛全量索引',all_body,all_script))
+print(f"OK index.html={os.path.getsize(p1):,}B all.html={os.path.getsize(p2):,}B | 语料 {total:,} (新论坛 {len(listed):,})")
