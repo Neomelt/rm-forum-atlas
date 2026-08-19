@@ -1,0 +1,60 @@
+<title>RM 论坛技术图鉴</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@700;900&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#F6F8FB; --surface:#FFFFFF; --ink:#1B2432; --muted:#5C6B80;
+  --accent:#2455B8; --accent-soft:#E8EEFA; --line:#DCE3ED; --code-bg:#EFF3F8;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --grid:#DCE3ED;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10151D; --surface:#171E29; --ink:#E4EAF4; --muted:#93A1B5;
+    --accent:#7AA2F7; --accent-soft:#1D2A45; --line:#2A3547; --code-bg:#1D2634;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --grid:#2A3547;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10151D; --surface:#171E29; --ink:#E4EAF4; --muted:#93A1B5;
+  --accent:#7AA2F7; --accent-soft:#1D2A45; --line:#2A3547; --code-bg:#1D2634;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --grid:#2A3547;
+}
+*{box-sizing:border-box}
+body{margin:0; background:var(--bg); color:var(--ink); font-family:"Noto Sans SC",-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; font-size:15.5px; line-height:1.75}
+.wrap{max-width:920px; margin:0 auto; padding:48px 24px 80px}
+header.hero{border-bottom:2px solid var(--ink); padding-bottom:26px; margin-bottom:36px}
+.eyebrow{font-size:12px; letter-spacing:.22em; text-transform:uppercase; color:var(--accent); font-weight:700; margin-bottom:14px}
+h1{font-family:"Noto Serif SC",serif; font-weight:900; font-size:clamp(30px,5vw,44px); line-height:1.25; margin:0 0 12px; text-wrap:balance}
+.meta{color:var(--muted); font-size:13.5px} .meta b{color:var(--ink)}
+h2{font-family:"Noto Serif SC",serif; font-weight:900; font-size:24px; margin:52px 0 8px; text-wrap:balance}
+h3{font-size:16.5px; font-weight:700; margin:30px 0 10px}
+.sub{color:var(--muted); font-size:14px; margin:0 0 18px}
+.tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; margin:24px 0 8px}
+.tile{background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:14px 16px}
+.tile b{display:block; font-size:26px; font-family:"JetBrains Mono",monospace; font-variant-numeric:tabular-nums; color:var(--ink)}
+.tile span{font-size:12.5px; color:var(--muted)}
+figure{margin:0 0 26px; background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:18px 20px 12px}
+figcaption{font-weight:700; margin-bottom:2px}
+figcaption em{font-style:normal; color:var(--accent)}
+.fignote{font-size:12.5px; color:var(--muted); margin:0 0 10px}
+svg{width:100%; height:auto; display:block}
+.s1{fill:var(--s1)} .s2{fill:var(--s2)} .s3{fill:var(--s3)}
+.grid{stroke:var(--grid); stroke-width:1}
+.tick{font-size:11px; fill:var(--muted)}
+.dlab{font-size:11px; font-weight:600; fill:var(--ink); font-family:"JetBrains Mono",monospace}
+.rlab{font-size:12px; fill:var(--ink)}
+.cthi{font-size:11px;font-weight:600;fill:#fff;font-family:"JetBrains Mono",monospace}
+.anno{font-size:11px; fill:var(--accent); font-weight:700}
+.legend text{font-size:12px; fill:var(--muted)}
+.hit path{transition:opacity .15s} .hit:hover path{opacity:.75}
+.tblwrap{overflow-x:auto; background:var(--surface); border:1px solid var(--line); border-radius:8px; margin-bottom:14px}
+table{border-collapse:collapse; width:100%; font-size:14px; min-width:600px}
+th{font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); text-align:left; padding:10px 14px; border-bottom:2px solid var(--line); white-space:nowrap}
+td{padding:10px 14px; border-bottom:1px solid var(--line); vertical-align:top}
+tr:last-child td{border-bottom:none}
+td.tm{white-space:nowrap; font-weight:700}
+td.lk{font-family:"JetBrains Mono",monospace; white-space:nowrap}
+a{color:var(--accent)}
+.note{background:var(--surface); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:8px; padding:16px 20px; font-size:14px; color:var(--muted); margin:20px 0}
+.note b{color:var(--ink)}
+footer{margin-top:48px; padding-top:18px; border-top:2px solid var(--ink); font-size:13px; color:var(--muted)}
+</style>
