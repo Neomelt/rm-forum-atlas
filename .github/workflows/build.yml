@@ -2,8 +2,11 @@ name: build-and-deploy
 
 on:
   schedule:
-    - cron: '17 1 * * *'   # 每日 09:17 北京时间
+    - cron: '4-59/10 * * * *'  # 每10分钟探测新帖(避开:00)
+    - cron: '17 1 * * *'       # 每日 09:17 北京时间无条件全量刷新
   workflow_dispatch:
+  repository_dispatch:
+    types: [new-article]
   push:
     branches: [main]
 
@@ -19,21 +22,47 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.detect.outputs.go }}
     steps:
       - uses: actions/checkout@v4
+      - name: Detect new articles (1 request)
+        id: detect
+        run: |
+          FORCE=no
+          case "${{ github.event_name }}" in
+            push|workflow_dispatch|repository_dispatch) FORCE=yes;;
+            schedule)
+              HM=$(date -u +%H%M)
+              if [ "$HM" -ge 0110 ] && [ "$HM" -le 0130 ]; then FORCE=yes; fi;;
+          esac
+          LATEST=$(curl -fsSL --max-time 20 -A "Mozilla/5.0" -H "Content-Type: application/json" \
+            -X POST https://bbs.robomaster.com/developers-server/rest/posts/list \
+            -d '{"pageSize":20,"pageNo":1,"filter":{"category":"WIKI"}}' \
+            | python3 -c "import json,sys; print(max(a['id'] for a in json.load(sys.stdin)['data']['list']))") || LATEST=0
+          DEPLOYED=$(curl -fsSL --max-time 20 "https://neomelt.github.io/rm-forum-atlas/state.json?nc=$(date +%s)" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin).get('latest_id',0))") || DEPLOYED=-1
+          echo "latest=$LATEST deployed=$DEPLOYED force=$FORCE"
+          if [ "$FORCE" = yes ] || { [ "$LATEST" -gt 0 ] && [ "$LATEST" != "$DEPLOYED" ]; }; then
+            echo "go=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=no" >> "$GITHUB_OUTPUT"
+          fi
       - name: Generate site
+        if: steps.detect.outputs.go == 'yes'
         run: |
           python3 generate.py . dist
           test "$(stat -c%s dist/index.html)" -gt 80000
           test "$(stat -c%s dist/all.html)" -gt 2000000
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
+        if: steps.detect.outputs.go == 'yes'
       - uses: actions/upload-pages-artifact@v3
+        if: steps.detect.outputs.go == 'yes'
         with:
           path: dist
   deploy:
     needs: build
+    if: needs.build.outputs.go == 'yes'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
