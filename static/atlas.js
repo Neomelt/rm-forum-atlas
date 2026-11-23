@@ -156,6 +156,7 @@
     let hitCount = 0;
     let totalRings = 0;
     let engaged = false;          // true after first hit in a round
+    let idleTimer = 2.5;          // idle state also cycles random 2-blade pairs every 2.5s
     let groupTimer = 0;           // 2.5s window to hit first blade of current group
     let pairWindow = 0;           // 1.0s window to hit second blade of current group
     // 5-blade activation celebration: 3 blinks at 2.5Hz (1.2s) + 1.0s hold (score badge fades out smoothly)
@@ -169,18 +170,31 @@
     let mouse = { x: CX, y: CY, inside: false };
 
     function spawnGroup(startTimeout) {
+      const prevMask = blades.map(s => s === 1 ? '1' : '0').join('');
       for (let i = 0; i < 5; i++) {
         if (blades[i] === 1) blades[i] = 0;
       }
       const unlit = blades.map((s, i) => s === 0 ? i : -1).filter(i => i >= 0);
       if (!unlit.length) return;
       const count = Math.min(2, unlit.length);
-      for (let k = 0; k < count; k++) {
-        const rIdx = Math.floor(Math.random() * unlit.length);
-        blades[unlit.splice(rIdx, 1)[0]] = 1;
+      // Avoid picking the exact same pair when cycling in idle mode
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const pool = unlit.slice();
+        const picked = [];
+        for (let k = 0; k < count; k++) {
+          const rIdx = Math.floor(Math.random() * pool.length);
+          picked.push(pool.splice(rIdx, 1)[0]);
+        }
+        const nextMask = [0, 1, 2, 3, 4].map(i => picked.includes(i) ? '1' : '0').join('');
+        if (nextMask !== prevMask || unlit.length <= count) {
+          picked.forEach(i => { blades[i] = 1; });
+          break;
+        }
+        if (attempt === 5) picked.forEach(i => { blades[i] = 1; });
       }
       pairWindow = 0;
       groupTimer = startTimeout ? 2.5 : 0;
+      idleTimer = 2.5;
     }
 
     function resetRune(reasonText, popPos) {
@@ -433,6 +447,14 @@
 
       ctx.clearRect(0, 0, SIZE, SIZE);
       const [cr, cg, cb] = col.rgb;
+
+      // Idle state: silently cycle to a new random 2-blade group every 2.5s (real arena behavior)
+      if (blinkTimer === 0 && !engaged) {
+        idleTimer -= dt;
+        if (idleTimer <= 0) {
+          spawnGroup(false);
+        }
+      }
 
       // Real-rule timers: 1.0s pair follow-up window & 2.5s group timeout (both reset on miss)
       if (blinkTimer === 0 && engaged) {
