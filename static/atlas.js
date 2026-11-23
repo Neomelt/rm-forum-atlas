@@ -154,32 +154,26 @@
 
     let blades = [0, 0, 0, 0, 0]; // 0=unlit, 1=pending(current group), 2=activated
     let hitCount = 0;
-    let engaged = false;          // true after first hit in a round (enables 2.5s timeout)
+    let totalRings = 0;
+    let engaged = false;          // true after first hit in a round
     let groupTimer = 0;           // 2.5s window to hit first blade of current group
     let pairWindow = 0;           // 1.0s window to hit second blade of current group
-    // 5-blade activation blink state: 3 blinks at ~2.5Hz (0.4s per cycle) + 0.5s hold
+    // 5-blade activation celebration: 3 blinks at 2.5Hz (1.2s) + 1.0s hold (score badge fades out smoothly)
     let blinkTimer = 0;
     const BLINK_CYCLES = 3;
     const BLINK_PERIOD = 0.4; // 2.5 Hz
-    const BLINK_TOTAL = BLINK_CYCLES * BLINK_PERIOD + 0.5;
+    const BLINK_HOLD = 1.0;
+    const BLINK_TOTAL = BLINK_CYCLES * BLINK_PERIOD + BLINK_HOLD;
+    let finalScore = null;        // { total, avg }
     let hitPop = null;
     let mouse = { x: CX, y: CY, inside: false };
 
     function spawnGroup(startTimeout) {
-      // Clear any unhit pending blades from previous group back to 0
       for (let i = 0; i < 5; i++) {
         if (blades[i] === 1) blades[i] = 0;
       }
       const unlit = blades.map((s, i) => s === 0 ? i : -1).filter(i => i >= 0);
-      if (!unlit.length) {
-        blinkTimer = BLINK_TOTAL;
-        engaged = false;
-        groupTimer = 0;
-        pairWindow = 0;
-        if (hudHit) hudHit.textContent = '5/5 已激活';
-        return;
-      }
-      // Randomly pick up to 2 unlit blades for this group
+      if (!unlit.length) return;
       const count = Math.min(2, unlit.length);
       for (let k = 0; k < count; k++) {
         const rIdx = Math.floor(Math.random() * unlit.length);
@@ -192,6 +186,8 @@
     function resetRune(reasonText, popPos) {
       blades = [0, 0, 0, 0, 0];
       hitCount = 0;
+      totalRings = 0;
+      finalScore = null;
       engaged = false;
       groupTimer = 0;
       pairWindow = 0;
@@ -236,7 +232,7 @@
       }
       if (hitIdx < 0) return;
 
-      // Hit a non-pending blade -> reset immediately (real rule)
+      // Hit a non-pending blade -> reset immediately
       if (blades[hitIdx] !== 1) {
         resetRune('误击重置', hitPos);
         return;
@@ -246,25 +242,27 @@
       const ring = Math.max(1, Math.min(10, Math.round(10 - (hitDist / TARGET_R) * 8)));
       blades[hitIdx] = 2;
       hitCount++;
+      totalRings += ring;
       engaged = true;
       hitPop = { x: hitPos.x, y: hitPos.y, text: ring + ' 环', alpha: 1.0, warn: false };
 
       if (hitCount >= 5) {
         blinkTimer = BLINK_TOTAL;
+        finalScore = { total: totalRings, avg: (totalRings / 5).toFixed(1) };
         engaged = false;
         groupTimer = 0;
         pairWindow = 0;
-        if (hudHit) hudHit.textContent = '5/5 已激活';
+        if (hudHit) hudHit.textContent = `5/5 · ${totalRings} 环`;
         return;
       }
 
       const remainInGroup = blades.filter(s => s === 1).length;
       if (remainInGroup > 0) {
-        // First hit in this 2-blade group -> open 1.0s window for the second blade
+        // First hit in this 2-blade group -> must hit the other blade within 1.0s
         groupTimer = 0;
         pairWindow = 1.0;
       } else {
-        // Both blades in this group hit -> advance immediately to next group (2.5s window)
+        // Both blades in this group hit -> advance to next group (2.5s window)
         spawnGroup(true);
       }
     });
@@ -436,14 +434,13 @@
       ctx.clearRect(0, 0, SIZE, SIZE);
       const [cr, cg, cb] = col.rgb;
 
-      // Real-rule timers: 1.0s pair follow-up window & 2.5s group timeout
+      // Real-rule timers: 1.0s pair follow-up window & 2.5s group timeout (both reset on miss)
       if (blinkTimer === 0 && engaged) {
         if (pairWindow > 0) {
           pairWindow -= dt;
           if (hudHit) hudHit.textContent = `${hitCount}/5 · ${Math.max(0, pairWindow).toFixed(1)}s`;
           if (pairWindow <= 0) {
-            // 1s window expired -> advance to next group (2.5s timeout)
-            spawnGroup(true);
+            resetRune('超时重置');
           }
         } else if (groupTimer > 0) {
           groupTimer -= dt;
@@ -506,6 +503,45 @@
         ctx.restore();
         hitPop.alpha -= dt * 1.3;
         if (hitPop.alpha <= 0) hitPop = null;
+      }
+
+      // Final total ring score overlay during celebration (fade-in -> hold -> fade-out on reset)
+      if (blinkTimer > 0 && finalScore) {
+        const elapsed = BLINK_TOTAL - blinkTimer;
+        let alpha = 1;
+        if (elapsed < 0.25) alpha = elapsed / 0.25;
+        else if (blinkTimer < 0.4) alpha = blinkTimer / 0.4;
+        alpha = Math.max(0, Math.min(1, alpha));
+        const lift = elapsed < 0.25 ? (1 - alpha) * 8 : 0;
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.translate(CX, CY - 58 + lift);
+
+        // Sleek dark pill badge
+        const bw = 136, bh = 52;
+        ctx.fillStyle = 'rgba(7,9,14,0.88)';
+        ctx.strokeStyle = `rgba(${cr},${cg},${cb},0.75)`;
+        ctx.lineWidth = 1.4;
+        ctx.shadowColor = col.hex;
+        ctx.shadowBlur = 16;
+        ctx.beginPath();
+        ctx.roundRect(-bw / 2, -bh / 2, bw, bh, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.shadowBlur = 8;
+        ctx.fillStyle = col.core;
+        ctx.font = '900 22px "JetBrains Mono", "Noto Sans SC", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${finalScore.total} 环`, 0, -6);
+
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = `rgba(${cr},${cg},${cb},0.92)`;
+        ctx.font = '600 10.5px "Noto Sans SC", sans-serif';
+        ctx.fillText(`激活成功 · 均 ${finalScore.avg} 环`, 0, 14);
+        ctx.restore();
       }
       requestAnimationFrame(frame);
     }
