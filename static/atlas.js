@@ -152,8 +152,11 @@
     let t = 0;
     let lastTs = performance.now();
 
-    let blades = [0, 0, 0, 0, 0];
+    let blades = [0, 0, 0, 0, 0]; // 0=unlit, 1=pending(current group), 2=activated
     let hitCount = 0;
+    let engaged = false;          // true after first hit in a round (enables 2.5s timeout)
+    let groupTimer = 0;           // 2.5s window to hit first blade of current group
+    let pairWindow = 0;           // 1.0s window to hit second blade of current group
     // 5-blade activation blink state: 3 blinks at ~2.5Hz (0.4s per cycle) + 0.5s hold
     let blinkTimer = 0;
     const BLINK_CYCLES = 3;
@@ -162,22 +165,47 @@
     let hitPop = null;
     let mouse = { x: CX, y: CY, inside: false };
 
-    function refillPending() {
-      let activePending = blades.filter(s => s === 1).length;
-      while (activePending < 2) {
-        const unlit = blades.map((s, i) => s === 0 ? i : -1).filter(i => i >= 0);
-        if (!unlit.length) break;
-        const pick = unlit[Math.floor(Math.random() * unlit.length)];
-        blades[pick] = 1;
-        activePending++;
+    function spawnGroup(startTimeout) {
+      // Clear any unhit pending blades from previous group back to 0
+      for (let i = 0; i < 5; i++) {
+        if (blades[i] === 1) blades[i] = 0;
       }
+      const unlit = blades.map((s, i) => s === 0 ? i : -1).filter(i => i >= 0);
+      if (!unlit.length) {
+        blinkTimer = BLINK_TOTAL;
+        engaged = false;
+        groupTimer = 0;
+        pairWindow = 0;
+        if (hudHit) hudHit.textContent = '5/5 已激活';
+        return;
+      }
+      // Randomly pick up to 2 unlit blades for this group
+      const count = Math.min(2, unlit.length);
+      for (let k = 0; k < count; k++) {
+        const rIdx = Math.floor(Math.random() * unlit.length);
+        blades[unlit.splice(rIdx, 1)[0]] = 1;
+      }
+      pairWindow = 0;
+      groupTimer = startTimeout ? 2.5 : 0;
     }
 
-    function resetRune() {
+    function resetRune(reasonText, popPos) {
       blades = [0, 0, 0, 0, 0];
       hitCount = 0;
-      refillPending();
+      engaged = false;
+      groupTimer = 0;
+      pairWindow = 0;
+      spawnGroup(false);
       if (hudHit) hudHit.textContent = '0/5';
+      if (reasonText) {
+        hitPop = {
+          x: popPos ? popPos.x : CX,
+          y: popPos ? popPos.y : CY - 36,
+          text: reasonText,
+          alpha: 1.0,
+          warn: true
+        };
+      }
     }
     resetRune();
 
@@ -198,27 +226,46 @@
       const r = canvas.getBoundingClientRect();
       const mx = (e.clientX - r.left) * (SIZE / r.width);
       const my = (e.clientY - r.top) * (SIZE / r.height);
-      let bestIdx = -1, bestDist = Infinity, bestPos = null;
+      let hitIdx = -1, hitDist = Infinity, hitPos = null;
       for (let i = 0; i < 5; i++) {
-        if (blades[i] !== 1) continue;
         const tp = getTargetPos(i);
         const dist = Math.hypot(mx - tp.x, my - tp.y);
-        if (dist <= TARGET_R * 1.2 && dist < bestDist) {
-          bestIdx = i; bestDist = dist; bestPos = tp;
+        if (dist <= TARGET_R * 1.2 && dist < hitDist) {
+          hitIdx = i; hitDist = dist; hitPos = tp;
         }
       }
-      if (bestIdx >= 0) {
-        const ring = Math.max(1, Math.min(10, Math.round(10 - (bestDist / TARGET_R) * 8)));
-        blades[bestIdx] = 2;
-        hitCount++;
-        hitPop = { x: bestPos.x, y: bestPos.y, text: ring + ' 环', alpha: 1.0 };
-        if (hitCount >= 5) {
-          blinkTimer = BLINK_TOTAL;
-          if (hudHit) hudHit.textContent = '5/5 已激活';
-        } else {
-          if (hudHit) hudHit.textContent = hitCount + '/5';
-          refillPending();
-        }
+      if (hitIdx < 0) return;
+
+      // Hit a non-pending blade -> reset immediately (real rule)
+      if (blades[hitIdx] !== 1) {
+        resetRune('误击重置', hitPos);
+        return;
+      }
+
+      // Valid hit on a pending blade in the current group
+      const ring = Math.max(1, Math.min(10, Math.round(10 - (hitDist / TARGET_R) * 8)));
+      blades[hitIdx] = 2;
+      hitCount++;
+      engaged = true;
+      hitPop = { x: hitPos.x, y: hitPos.y, text: ring + ' 环', alpha: 1.0, warn: false };
+
+      if (hitCount >= 5) {
+        blinkTimer = BLINK_TOTAL;
+        engaged = false;
+        groupTimer = 0;
+        pairWindow = 0;
+        if (hudHit) hudHit.textContent = '5/5 已激活';
+        return;
+      }
+
+      const remainInGroup = blades.filter(s => s === 1).length;
+      if (remainInGroup > 0) {
+        // First hit in this 2-blade group -> open 1.0s window for the second blade
+        groupTimer = 0;
+        pairWindow = 1.0;
+      } else {
+        // Both blades in this group hit -> advance immediately to next group (2.5s window)
+        spawnGroup(true);
       }
     });
 
@@ -389,6 +436,24 @@
       ctx.clearRect(0, 0, SIZE, SIZE);
       const [cr, cg, cb] = col.rgb;
 
+      // Real-rule timers: 1.0s pair follow-up window & 2.5s group timeout
+      if (blinkTimer === 0 && engaged) {
+        if (pairWindow > 0) {
+          pairWindow -= dt;
+          if (hudHit) hudHit.textContent = `${hitCount}/5 · ${Math.max(0, pairWindow).toFixed(1)}s`;
+          if (pairWindow <= 0) {
+            // 1s window expired -> advance to next group (2.5s timeout)
+            spawnGroup(true);
+          }
+        } else if (groupTimer > 0) {
+          groupTimer -= dt;
+          if (hudHit) hudHit.textContent = `${hitCount}/5 · ${Math.max(0, groupTimer).toFixed(1)}s`;
+          if (groupTimer <= 0) {
+            resetRune('超时重置');
+          }
+        }
+      }
+
       // Determine whether blades are visible during 3-blink celebration
       let blinkOn = true;
       if (blinkTimer > 0) {
@@ -430,14 +495,16 @@
 
       if (hitPop) {
         ctx.save();
-        ctx.fillStyle = `rgba(255,255,255,${hitPop.alpha.toFixed(2)})`;
-        ctx.shadowColor = col.hex;
+        ctx.fillStyle = hitPop.warn
+          ? `rgba(255,95,95,${hitPop.alpha.toFixed(2)})`
+          : `rgba(255,255,255,${hitPop.alpha.toFixed(2)})`;
+        ctx.shadowColor = hitPop.warn ? '#FF3B47' : col.hex;
         ctx.shadowBlur = 10;
         ctx.font = '700 13px "Noto Sans SC", sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(hitPop.text, hitPop.x, hitPop.y - (1 - hitPop.alpha) * 24);
         ctx.restore();
-        hitPop.alpha -= dt * 1.4;
+        hitPop.alpha -= dt * 1.3;
         if (hitPop.alpha <= 0) hitPop = null;
       }
       requestAnimationFrame(frame);
