@@ -152,8 +152,7 @@
     let t = 0;
     let lastTs = performance.now();
 
-    let blades = [1, 0, 0, 0, 0];
-    let pendingIdx = 0;
+    let blades = [0, 0, 0, 0, 0];
     let hitCount = 0;
     // 5-blade activation blink state: 3 blinks at ~2.5Hz (0.4s per cycle) + 0.5s hold
     let blinkTimer = 0;
@@ -161,18 +160,26 @@
     const BLINK_PERIOD = 0.4; // 2.5 Hz
     const BLINK_TOTAL = BLINK_CYCLES * BLINK_PERIOD + 0.5;
     let hitPop = null;
-    let mouse = { inside: false };
+    let mouse = { x: CX, y: CY, inside: false };
 
-    function nextPending() {
-      const unlit = blades.map((s, i) => s === 0 ? i : -1).filter(i => i >= 0);
-      if (!unlit.length) {
-        blinkTimer = BLINK_TOTAL;
-        if (hudHit) hudHit.textContent = '5/5 已激活';
-        return;
+    function refillPending() {
+      let activePending = blades.filter(s => s === 1).length;
+      while (activePending < 2) {
+        const unlit = blades.map((s, i) => s === 0 ? i : -1).filter(i => i >= 0);
+        if (!unlit.length) break;
+        const pick = unlit[Math.floor(Math.random() * unlit.length)];
+        blades[pick] = 1;
+        activePending++;
       }
-      pendingIdx = unlit[Math.floor(Math.random() * unlit.length)];
-      blades[pendingIdx] = 1;
     }
+
+    function resetRune() {
+      blades = [0, 0, 0, 0, 0];
+      hitCount = 0;
+      refillPending();
+      if (hudHit) hudHit.textContent = '0/5';
+    }
+    resetRune();
 
     function getTargetPos(idx) {
       const a = angle + idx * (Math.PI * 2 / 5);
@@ -181,19 +188,37 @@
 
     canvas.addEventListener('mouseenter', () => { mouse.inside = true; });
     canvas.addEventListener('mouseleave', () => { mouse.inside = false; });
+    canvas.addEventListener('mousemove', e => {
+      const r = canvas.getBoundingClientRect();
+      mouse.x = (e.clientX - r.left) * (SIZE / r.width);
+      mouse.y = (e.clientY - r.top) * (SIZE / r.height);
+    });
     canvas.addEventListener('click', e => {
+      if (blinkTimer > 0) return;
       const r = canvas.getBoundingClientRect();
       const mx = (e.clientX - r.left) * (SIZE / r.width);
       const my = (e.clientY - r.top) * (SIZE / r.height);
-      const tp = getTargetPos(pendingIdx);
-      const dist = Math.hypot(mx - tp.x, my - tp.y);
-      if (dist <= TARGET_R * 1.2 && blades[pendingIdx] === 1) {
-        const ring = Math.max(1, Math.min(10, Math.round(10 - (dist / TARGET_R) * 8)));
-        blades[pendingIdx] = 2;
+      let bestIdx = -1, bestDist = Infinity, bestPos = null;
+      for (let i = 0; i < 5; i++) {
+        if (blades[i] !== 1) continue;
+        const tp = getTargetPos(i);
+        const dist = Math.hypot(mx - tp.x, my - tp.y);
+        if (dist <= TARGET_R * 1.2 && dist < bestDist) {
+          bestIdx = i; bestDist = dist; bestPos = tp;
+        }
+      }
+      if (bestIdx >= 0) {
+        const ring = Math.max(1, Math.min(10, Math.round(10 - (bestDist / TARGET_R) * 8)));
+        blades[bestIdx] = 2;
         hitCount++;
-        hitPop = { x: tp.x, y: tp.y, text: ring + ' 环', alpha: 1.0 };
-        if (hudHit) hudHit.textContent = hitCount + '/5';
-        nextPending();
+        hitPop = { x: bestPos.x, y: bestPos.y, text: ring + ' 环', alpha: 1.0 };
+        if (hitCount >= 5) {
+          blinkTimer = BLINK_TOTAL;
+          if (hudHit) hudHit.textContent = '5/5 已激活';
+        } else {
+          if (hudHit) hudHit.textContent = hitCount + '/5';
+          refillPending();
+        }
       }
     });
 
@@ -376,11 +401,7 @@
         blinkTimer -= dt;
         if (blinkTimer <= 0) {
           blinkTimer = 0;
-          blades = [0, 0, 0, 0, 0];
-          pendingIdx = Math.floor(Math.random() * 5);
-          blades[pendingIdx] = 1;
-          hitCount = 0;
-          if (hudHit) hudHit.textContent = '0/5';
+          resetRune();
         }
       }
 
@@ -396,8 +417,15 @@
         drawBlade(i, st, col, nowSec);
       }
       drawCenterR(col, nowSec);
-      if (blinkTimer === 0 && mouse.inside && blades[pendingIdx] === 1) {
-        drawReticle(getTargetPos(pendingIdx), col);
+      if (blinkTimer === 0 && mouse.inside) {
+        let nearest = null, minDist = Infinity;
+        for (let i = 0; i < 5; i++) {
+          if (blades[i] !== 1) continue;
+          const tp = getTargetPos(i);
+          const d = Math.hypot(mouse.x - tp.x, mouse.y - tp.y);
+          if (d < minDist) { minDist = d; nearest = tp; }
+        }
+        if (nearest) drawReticle(nearest, col);
       }
 
       if (hitPop) {
