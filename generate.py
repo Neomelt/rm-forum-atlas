@@ -6,6 +6,7 @@
 """
 import collections
 import datetime
+import hashlib
 import html
 import json
 import os
@@ -434,6 +435,15 @@ def topbar(cur):
 </header>"""
 
 
+def asset_ver(rel_path):
+    data = open(os.path.join(ROOT, rel_path), "rb").read()
+    return hashlib.sha1(data).hexdigest()[:8]
+
+
+ATLAS_VER = asset_ver("static/atlas.js")
+SEARCH_VER = asset_ver("static/index_search.js")
+
+
 def shell(title, cur, body, extra_js=""):
     head = head_raw.replace("<title>RM 论坛技术图鉴</title>", f"<title>{esc(title)}</title>")
     return f"""<!doctype html>
@@ -452,7 +462,7 @@ def shell(title, cur, body, extra_js=""):
 </main>
 <div class="hud-tip" id="hudTip"></div>
 {BEYBLADE_BTN}
-<script src="./assets/atlas.js"></script>
+<script src="./assets/atlas.js?v={ATLAS_VER}"></script>
 {extra_js}
 </body>
 </html>"""
@@ -645,7 +655,7 @@ p1 = os.path.join(OUT, "index.html")
 p2 = os.path.join(OUT, "all.html")
 open(p1, "w", encoding="utf-8").write(shell("RM 论坛技术图鉴", "atlas", atlas_body))
 open(p2, "w", encoding="utf-8").write(
-    shell("RM 论坛全量索引", "all", all_body, '<script src="./assets/index_search.js"></script>')
+    shell("RM 论坛全量索引", "all", all_body, f'<script src="./assets/index_search.js?v={SEARCH_VER}"></script>')
 )
 
 latest_id = max((a["id"] for a in listed), default=0)
